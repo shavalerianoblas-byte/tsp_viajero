@@ -990,10 +990,22 @@ function buildFromEdges(n, edges, maxIn, maxOut) {
     try { navigator.clipboard.writeText(text).then(function () { msgEl.textContent = okMsg; }, fallback); } catch (e) { fallback(); }
   }
   /* ---------- Informe PDF ---------- */
-  var dlP = null;
   function getDl() {
-    if (!dlP) dlP = (window.claude && window.claude.use) ? window.claude.use('downloads').catch(function () { return null; }) : Promise.resolve(null);
-    return dlP;
+    return Promise.resolve({
+      save: function(opt) {
+        // Genera el archivo directamente usando el navegador
+        var blob = new Blob([opt.data], { type: 'application/pdf' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = opt.filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        return Promise.resolve();
+      }
+    });
   }
   var ORIGIN_NAME = { manual: 'Manual', aleatorio: 'Aleatorio mixto', importado: 'Importado' };
   function reportInfo(withResult) {
@@ -1026,11 +1038,10 @@ function buildFromEdges(n, edges, maxIn, maxOut) {
       img.src = url;
     });
   }
-  async function downloadReport(withResult, btn, msgEl) {
+async function downloadReport(withResult, btn, msgEl) {
     var say = function (t, c) { msgEl.textContent = t; msgEl.className = 'msg ' + (c || ''); };
     if (!window.jspdf) return say('No se cargó el generador de PDF. Revisa tu conexión y recarga la página, o usa "Copiar resultado".', 'bad');
     var dl = await getDl();
-    if (!dl) return say('Este visor no permite descargar archivos. Abre la página desde Claude o usa "Copiar resultado" y pégalo en tu documento.', 'warn');
     btn.disabled = true; say('Preparando el informe…');
     try {
       var info = reportInfo(withResult), png = await graphPng({ n: info.n, m: info.m, pos: S.pos }, info.sum ? { path: info.sum.route, color: 'var(--ok)' } : {});
@@ -1040,7 +1051,7 @@ function buildFromEdges(n, edges, maxIn, maxOut) {
       await dl.save({ filename: name, data: doc.output('arraybuffer') });
       say('Informe listo: ' + name, 'ok');
     } catch (e) {
-      say(e && e.code === 'declined' ? 'Descarga cancelada.' : 'No se pudo generar el informe' + (e && e.message ? ': ' + e.message : '.'), e && e.code === 'declined' ? '' : 'bad');
+      say('No se pudo generar el informe' + (e && e.message ? ': ' + e.message : '.'), 'bad');
     }
     btn.disabled = false;
   }
